@@ -1,46 +1,44 @@
 # Telegram Original Mods
 
-Минимальные добавления **только функций** в оригинальный Telegram Android (DrKLO/Telegram).
+Рабочие дополнения к **оригинальному** Telegram Android (https://github.com/DrKLO/Telegram).
 
-## Что добавлено
+## Реализовано
 
-1. **Анимация падающего снега** в чатах, списках диалогов и т.д. (постоянно, не только на Новый год)
-2. **Удалённые сообщения** — сохранение и показ удалённых сообщений
-3. **Изменённые сообщения** — история правок
+### 1. Падающий снег в чатах
+- Класс `SnowflakesEffect`
+- Работает постоянно (не только 31 декабря)
+- `viewType = 1` — плотный снег для чатов
 
-Всё сделано максимально минимально: новые классы + небольшие хуки.
+### 2. Удалённые сообщения
+- `DeletedMessagesManager` — сохраняет сообщения при удалении
+- Хранение в памяти + простое сохранение
+- Методы: `onMessagesDeleted`, `isDeleted`, `getDeleted`, `getDeletedForDialog`
 
-## Как использовать
+### 3. История правок
+- `EditedMessagesManager` — сохраняет предыдущие версии текста
+- `onMessageEdited`, `getHistory`, `hasHistory`
 
-1. Клонируй оригинальный репозиторий:
-   ```bash
-   git clone --recursive https://github.com/DrKLO/Telegram.git
-   cd Telegram
-   ```
+## Как поставить (пошагово)
 
-2. Скопируй файлы из папки `src/` этого репозитория в соответствующие места:
-   - `src/org/telegram/ui/Components/SnowflakesEffect.java` → `TMessagesProj/src/main/java/org/telegram/ui/Components/`
-   - `src/org/telegram/messenger/Mods/` → `TMessagesProj/src/main/java/org/telegram/messenger/Mods/`
-
-3. Добавь минимальные хуки (смотри `HOOKS.md`)
-
-4. Собери как обычно.
-
-## Структура
-
-```
-src/
-├── org/telegram/ui/Components/
-│   └── SnowflakesEffect.java          # анимация снега
-└── org/telegram/messenger/Mods/
-    ├── DeletedMessagesManager.java    # удалённые сообщения
-    ├── EditedMessagesManager.java     # история правок
-    └── ModsConfig.java                # настройки
+1. Клонируй оригинал:
+```bash
+git clone --recursive https://github.com/DrKLO/Telegram.git
+cd Telegram
 ```
 
-## Настройки
+2. Скопируй файлы:
+```bash
+cp -r /path/to/Telegram-Original-Mods/src/org/telegram/ui/Components/SnowflakesEffect.java TMessagesProj/src/main/java/org/telegram/ui/Components/
+mkdir -p TMessagesProj/src/main/java/org/telegram/messenger/Mods
+cp -r /path/to/Telegram-Original-Mods/src/org/telegram/messenger/Mods/* TMessagesProj/src/main/java/org/telegram/messenger/Mods/
+```
 
-В `ModsConfig` можно включать/выключать функции.
+3. Добавь хуки из файла **INTEGRATION.md** (конкретные места и код).
 
----
-Только добавление функций. Оригинальный код почти не трогается.
+4. Собери проект как обычно.
+
+## Важно
+
+Это **не** готовый APK и не полный форк.  
+Это готовые классы + точные места, куда вставить 5–15 строк в оригинальный код.  
+Без этих хуков менеджеры сами ничего не увидят.

@@ -1,8 +1,6 @@
 /*
- * This is the source code of Telegram for Android.
- * Licensed under GNU GPL v. 2 or later.
- *
- * Enhanced permanent snow animation for chats.
+ * Enhanced permanent snow animation for Telegram Android chats.
+ * Based on original Telegram code, modified to always run.
  */
 package org.telegram.ui.Components;
 
@@ -17,15 +15,14 @@ import android.view.View;
 import androidx.core.graphics.ColorUtils;
 
 import org.telegram.messenger.AndroidUtilities;
-import org.telegram.messenger.LiteMode;
 import org.telegram.messenger.Utilities;
 import org.telegram.ui.ActionBar.Theme;
 
 import java.util.ArrayList;
 
 public class SnowflakesEffect {
-    private final BatchParticlesDrawHelper.BatchParticlesBuffer batchParticlesBuffer;
-    private final Paint batchParticlesPaint;
+    private BatchParticlesDrawHelper.BatchParticlesBuffer batchParticlesBuffer;
+    private Paint batchParticlesPaint;
 
     private final Paint particlePaint;
     private final Paint particleThinPaint;
@@ -35,7 +32,7 @@ public class SnowflakesEffect {
     private final int viewType;
     private final int maxCount;
 
-    Bitmap particleBitmap;
+    private Bitmap particleBitmap;
     private long lastAnimationTime;
 
     private class Particle {
@@ -48,7 +45,6 @@ public class SnowflakesEffect {
                     particlePaint.setAlpha((int) (255 * alpha));
                     canvas.drawPoint(x, y, particlePaint);
                     break;
-                case 1:
                 default:
                     if (particleBitmap == null) {
                         particleBitmap = createParticlesBitmap(false);
@@ -56,7 +52,7 @@ public class SnowflakesEffect {
                     bitmapPaint.setAlpha((int) (255 * alpha));
                     canvas.save();
                     canvas.scale(scale, scale, x, y);
-                    canvas.drawBitmap(particleBitmap, x, y, bitmapPaint);
+                    canvas.drawBitmap(particleBitmap, x - particleBitmap.getWidth() / 2f, y - particleBitmap.getHeight() / 2f, bitmapPaint);
                     canvas.restore();
                     break;
             }
@@ -68,11 +64,12 @@ public class SnowflakesEffect {
     private int color;
 
     /**
-     * @param viewType 0 = лёгкий снег (меню), 1 = плотный снег (чаты)
+     * @param viewType 0 = лёгкий, 1 = плотный (для чатов)
      */
     public SnowflakesEffect(int viewType) {
         this.viewType = viewType;
-        this.maxCount = viewType == 0 ? 100 : 300;
+        this.maxCount = viewType == 0 ? 80 : 250;
+
         particlePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         particlePaint.setStrokeWidth(dp(1.5f));
         particlePaint.setStrokeCap(Paint.Cap.ROUND);
@@ -83,16 +80,18 @@ public class SnowflakesEffect {
         particleThinPaint.setStrokeCap(Paint.Cap.ROUND);
         particleThinPaint.setStyle(Paint.Style.STROKE);
 
-        if (BatchParticlesDrawHelper.isAvailable()) {
-            batchParticlesBuffer = new BatchParticlesDrawHelper.BatchParticlesBuffer(maxCount);
-            batchParticlesPaint = BatchParticlesDrawHelper.createBatchParticlesPaint(createParticlesBitmap(true));
-        } else {
+        try {
+            if (BatchParticlesDrawHelper.isAvailable()) {
+                batchParticlesBuffer = new BatchParticlesDrawHelper.BatchParticlesBuffer(maxCount);
+                batchParticlesPaint = BatchParticlesDrawHelper.createBatchParticlesPaint(createParticlesBitmap(true));
+            }
+        } catch (Throwable t) {
             batchParticlesBuffer = null;
             batchParticlesPaint = null;
         }
 
         updateColors();
-        for (int a = 0; a < 20; a++) {
+        for (int a = 0; a < 30; a++) {
             freeParticles.add(new Particle());
         }
     }
@@ -108,128 +107,115 @@ public class SnowflakesEffect {
     }
 
     public void updateColors() {
-        final int color = forcedColor != 0 ? forcedColor : Theme.getColor(colorKey) & 0xffe6e6e6;
-        if (this.color != color) {
-            this.color = color;
-            particlePaint.setColor(color);
-            particleThinPaint.setColor(color);
+        final int c = forcedColor != 0 ? forcedColor : (Theme.getColor(colorKey) & 0xffe6e6e6);
+        if (this.color != c) {
+            this.color = c;
+            particlePaint.setColor(c);
+            particleThinPaint.setColor(c);
         }
     }
 
     private void updateParticles(long dt) {
         int count = particles.size();
         for (int a = 0; a < count; a++) {
-            Particle particle = particles.get(a);
-            if (particle.currentTime >= particle.lifeTime) {
-                if (freeParticles.size() < 40) {
-                    freeParticles.add(particle);
-                }
+            Particle p = particles.get(a);
+            if (p.currentTime >= p.lifeTime) {
+                if (freeParticles.size() < 50) freeParticles.add(p);
                 particles.remove(a);
                 a--;
                 count--;
                 continue;
             }
-            if (viewType == 0) {
-                if (particle.currentTime < 200.0f) {
-                    particle.alpha = AndroidUtilities.accelerateInterpolator.getInterpolation(particle.currentTime / 200.0f);
-                } else {
-                    particle.alpha = 1.0f - AndroidUtilities.decelerateInterpolator.getInterpolation((particle.currentTime - 200.0f) / (particle.lifeTime - 200.0f));
-                }
+            if (p.currentTime < 200f) {
+                p.alpha = AndroidUtilities.accelerateInterpolator.getInterpolation(p.currentTime / 200f);
+            } else if (p.lifeTime - p.currentTime < 2000) {
+                p.alpha = AndroidUtilities.decelerateInterpolator.getInterpolation((p.lifeTime - p.currentTime) / 2000f);
             } else {
-                if (particle.currentTime < 200.0f) {
-                    particle.alpha = AndroidUtilities.accelerateInterpolator.getInterpolation(particle.currentTime / 200.0f);
-                } else if (particle.lifeTime - particle.currentTime < 2000) {
-                    particle.alpha = AndroidUtilities.decelerateInterpolator.getInterpolation((particle.lifeTime - particle.currentTime) / 2000);
-                }
+                p.alpha = 1f;
             }
-            particle.x += particle.vx * particle.velocity * dt / 500.0f;
-            particle.y += particle.vy * particle.velocity * dt / 500.0f;
-            particle.currentTime += dt;
+            p.x += p.vx * p.velocity * dt / 500f;
+            p.y += p.vy * p.velocity * dt / 500f;
+            p.currentTime += dt;
         }
     }
 
     public void onDraw(View parent, Canvas canvas) {
-        // Всегда рисуем, игнорируем LiteMode для постоянного снега
-        if (parent == null || canvas == null) {
-            return;
-        }
+        if (parent == null || canvas == null) return;
+        if (!org.telegram.messenger.Mods.ModsConfig.snowEnabled) return;
 
         if (batchParticlesBuffer != null) {
             final int count = Math.min(maxCount, particles.size());
             final int texSize = dp(TEXTURE_SIZE_DP);
-
             for (int a = 0; a < count; a++) {
-                Particle particle = particles.get(a);
-                final float x = particle.x, y = particle.y;
-                final float h = particle.type == 0 ? (texSize / 2f) : (texSize / 2f * particle.scale);
-                final float tx = particle.type == 0 ? texSize : 0;
-
-                batchParticlesBuffer.setParticleColor(a, ColorUtils.setAlphaComponent(color, (int) (255 * particle.alpha)));
-                batchParticlesBuffer.setParticleVertexCords(a, x - h, y - h, x + h, y + h);
+                Particle p = particles.get(a);
+                float h = p.type == 0 ? texSize / 2f : texSize / 2f * p.scale;
+                float tx = p.type == 0 ? texSize : 0;
+                batchParticlesBuffer.setParticleColor(a, ColorUtils.setAlphaComponent(color, (int) (255 * p.alpha)));
+                batchParticlesBuffer.setParticleVertexCords(a, p.x - h, p.y - h, p.x + h, p.y + h);
                 batchParticlesBuffer.setParticleTextureCords(a, tx, 0, tx + texSize, texSize);
             }
             BatchParticlesDrawHelper.draw(canvas, batchParticlesBuffer, count, batchParticlesPaint);
         } else {
-            final int count = particles.size();
-            for (int a = 0; a < count; a++) {
+            for (int a = 0; a < particles.size(); a++) {
                 particles.get(a).draw(canvas);
             }
         }
 
-        int createPerFrame = viewType == 0 ? 1 : 10;
+        int createPerFrame = viewType == 0 ? 1 : 8;
         if (particles.size() < maxCount) {
             for (int i = 0; i < createPerFrame; i++) {
-                if (particles.size() < maxCount && Utilities.random.nextFloat() > 0.7f) {
-                    int statusBarHeight = AndroidUtilities.statusBarHeight;
+                if (particles.size() >= maxCount) break;
+                if (Utilities.random.nextFloat() > 0.65f) {
                     float cx = Utilities.random.nextFloat() * parent.getMeasuredWidth();
                     float cy = viewType == 0
-                            ? statusBarHeight + Utilities.random.nextFloat() * (parent.getMeasuredHeight() - dp(20) - statusBarHeight)
+                            ? AndroidUtilities.statusBarHeight + Utilities.random.nextFloat() * (parent.getMeasuredHeight() - dp(20) - AndroidUtilities.statusBarHeight)
                             : Utilities.random.nextFloat() * parent.getMeasuredHeight();
 
-                    int angle = Utilities.random.nextInt(40) - 20 + 90;
+                    int angle = Utilities.random.nextInt(50) - 25 + 90;
                     float vx = (float) Math.cos(Math.PI / 180.0 * angle);
                     float vy = (float) Math.sin(Math.PI / 180.0 * angle);
 
-                    Particle newParticle = freeParticles.isEmpty() ? new Particle() : freeParticles.remove(0);
-                    newParticle.x = cx;
-                    newParticle.y = cy;
-                    newParticle.vx = vx;
-                    newParticle.vy = vy;
-                    newParticle.alpha = 0.0f;
-                    newParticle.currentTime = 0;
-                    newParticle.scale = Utilities.random.nextFloat() * 1.2f;
-                    newParticle.type = Utilities.random.nextInt(2);
-                    newParticle.lifeTime = viewType == 0 ? 2000 + Utilities.random.nextInt(100) : 3000 + Utilities.random.nextInt(2000);
-                    newParticle.velocity = 20.0f + Utilities.random.nextFloat() * 4.0f;
-                    particles.add(newParticle);
+                    Particle np = freeParticles.isEmpty() ? new Particle() : freeParticles.remove(0);
+                    np.x = cx;
+                    np.y = cy;
+                    np.vx = vx;
+                    np.vy = vy;
+                    np.alpha = 0f;
+                    np.currentTime = 0;
+                    np.scale = 0.6f + Utilities.random.nextFloat() * 1.0f;
+                    np.type = Utilities.random.nextInt(2);
+                    np.lifeTime = viewType == 0 ? 1800 + Utilities.random.nextInt(800) : 2800 + Utilities.random.nextInt(2200);
+                    np.velocity = 18f + Utilities.random.nextFloat() * 6f;
+                    particles.add(np);
                 }
             }
         }
 
-        long newTime = System.currentTimeMillis();
-        long dt = Math.min(17, newTime - lastAnimationTime);
+        long now = System.currentTimeMillis();
+        long dt = Math.min(17, now - lastAnimationTime);
         updateParticles(dt);
-        lastAnimationTime = newTime;
+        lastAnimationTime = now;
         parent.invalidate();
     }
 
     private static final int TEXTURE_SIZE_DP = 10;
 
     private static Bitmap createParticlesBitmap(boolean useFull) {
-        final Paint particleThinPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        particleThinPaint.setStrokeWidth(dp(0.5f));
-        particleThinPaint.setStrokeCap(Paint.Cap.ROUND);
-        particleThinPaint.setStyle(Paint.Style.STROKE);
-        particleThinPaint.setColor(0xFFFFFFFF);
+        Paint thin = new Paint(Paint.ANTI_ALIAS_FLAG);
+        thin.setStrokeWidth(dp(0.5f));
+        thin.setStrokeCap(Paint.Cap.ROUND);
+        thin.setStyle(Paint.Style.STROKE);
+        thin.setColor(0xFFFFFFFF);
 
-        final Bitmap particleBitmap = Bitmap.createBitmap(useFull ? dp(TEXTURE_SIZE_DP * 2) : dp(TEXTURE_SIZE_DP), dp(TEXTURE_SIZE_DP), Bitmap.Config.ARGB_8888);
-        final Canvas bitmapCanvas = new Canvas(particleBitmap);
-        final float px = dpf2(2.0f) * 2;
-        final float px1 = -dpf2(0.57f) * 2;
-        final float py1 = dpf2(1.55f) * 2;
-        final float x = dp(TEXTURE_SIZE_DP / 2f);
-        final float y = dp(TEXTURE_SIZE_DP / 2f);
-        final float angleDiff = (float) (Math.PI / 180 * 60);
+        Bitmap bmp = Bitmap.createBitmap(useFull ? dp(TEXTURE_SIZE_DP * 2) : dp(TEXTURE_SIZE_DP),
+                dp(TEXTURE_SIZE_DP), Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(bmp);
+        float px = dpf2(2f) * 2;
+        float px1 = -dpf2(0.57f) * 2;
+        float py1 = dpf2(1.55f) * 2;
+        float x = dp(TEXTURE_SIZE_DP / 2f);
+        float y = dp(TEXTURE_SIZE_DP / 2f);
+        float angleDiff = (float) (Math.PI / 180 * 60);
 
         float angle = (float) -Math.PI / 2;
         for (int a = 0; a < 6; a++) {
@@ -237,29 +223,28 @@ public class SnowflakesEffect {
             float y1 = (float) Math.sin(angle) * px;
             float cx = x1 * 0.66f;
             float cy = y1 * 0.66f;
-            bitmapCanvas.drawLine(x, y, x + x1, y + y1, particleThinPaint);
+            c.drawLine(x, y, x + x1, y + y1, thin);
 
             float angle2 = (float) (angle - Math.PI / 2);
             x1 = (float) (Math.cos(angle2) * px1 - Math.sin(angle2) * py1);
             y1 = (float) (Math.sin(angle2) * px1 + Math.cos(angle2) * py1);
-            bitmapCanvas.drawLine(x + cx, y + cy, x + x1, y + y1, particleThinPaint);
+            c.drawLine(x + cx, y + cy, x + x1, y + y1, thin);
 
             x1 = (float) (-Math.cos(angle2) * px1 - Math.sin(angle2) * py1);
             y1 = (float) (-Math.sin(angle2) * px1 + Math.cos(angle2) * py1);
-            bitmapCanvas.drawLine(x + cx, y + cy, x + x1, y + y1, particleThinPaint);
+            c.drawLine(x + cx, y + cy, x + x1, y + y1, thin);
 
             angle += angleDiff;
         }
 
         if (useFull) {
-            final Paint particlePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            particlePaint.setStrokeWidth(dp(1.5f));
-            particlePaint.setStrokeCap(Paint.Cap.ROUND);
-            particlePaint.setStyle(Paint.Style.STROKE);
-            particlePaint.setColor(0xFFFFFFFF);
-            bitmapCanvas.drawPoint(dp(TEXTURE_SIZE_DP * 1.5f), dp(TEXTURE_SIZE_DP / 2f), particlePaint);
+            Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+            p.setStrokeWidth(dp(1.5f));
+            p.setStrokeCap(Paint.Cap.ROUND);
+            p.setStyle(Paint.Style.STROKE);
+            p.setColor(0xFFFFFFFF);
+            c.drawPoint(dp(TEXTURE_SIZE_DP * 1.5f), dp(TEXTURE_SIZE_DP / 2f), p);
         }
-
-        return particleBitmap;
+        return bmp;
     }
 }
